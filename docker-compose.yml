@@ -1,0 +1,44 @@
+services:
+  backend:
+    build: ./backend
+    container_name: trip-memory-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8003:8003"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8003
+      - DB_HOST=news-mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=trip_memory
+      - TRIPCANVAS_API_URL=${TRIPCANVAS_API_URL:-http://trip-backend:8002/api}
+      - TRIPCANVAS_API_TOKEN=${TRIPCANVAS_API_TOKEN:-}
+      - TRIPCANVAS_SERVICE_USERNAME=${TRIPCANVAS_SERVICE_USERNAME}
+      - TRIPCANVAS_SERVICE_PASSWORD=${TRIPCANVAS_SERVICE_PASSWORD}
+      - BAIDUNET_APP_KEY=${BAIDUNET_APP_KEY}
+      - BAIDUNET_SECRET_KEY=${BAIDUNET_SECRET_KEY}
+      - BAIDUNET_REDIRECT_URI=${BAIDUNET_REDIRECT_URI}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - JWT_SECRET=${JWT_SECRET:-tripmemory-secret-2026}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - tripmemory-static:/app/static
+    networks:
+      - news_news_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  tripmemory-static:
+
+networks:
+  news_news_net:
+    external: true
