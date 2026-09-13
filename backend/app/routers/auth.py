@@ -7,11 +7,14 @@ import hashlib
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..config import settings
 from ..models import User
+from ..services.tripcanvas_client import tripcanvas_client
+from ..services.credential_crypto import encrypt_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -91,3 +94,42 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
     return {"id": current_user.id, "username": current_user.username, "nickname": current_user.nickname, "role": current_user.role}
+
+
+class TripCanvasBindingIn(BaseModel):
+    """绑定 TripCanvas 账号请求。"""
+    tripcanvas_username: str
+    tripcanvas_password: str
+
+
+@router.get("/tripcanvas-binding")
+def get_tripcanvas_binding(current_user: User = Depends(get_current_user)):
+    """查询当前用户是否绑定 TripCanvas 账号（用户名掩码返回）。"""
+    bound = bool(current_user.tripcanvas_username and current_user.tripcanvas_password)
+    raw = current_user.tripcanvas_username or ""
+    masked = (raw[:2] + "***") if bound else ""
+    return {"bound": bound, "tripcanvas_username": masked}
+
+
+@router.put("/tripcanvas-binding")
+def set_tripcanvas_binding(data: TripCanvasBindingIn,
+                           current_user: User = Depends(get_current_user),
+                           db: Session = Depends(get_db)):
+    """绑定 TripCanvas 账号：先登录验证凭据有效，密码加密存储。"""
+    token = tripcanvas_client.login_user(data.tripcanvas_username, data.tripcanvas_password)
+    if not token:
+        raise HTTPException(status_code=400, detail="TripCanvas 账号或密码错误，无法绑定")
+    current_user.tripcanvas_username = data.tripcanvas_username
+    current_user.tripcanvas_password = encrypt_password(data.tripcanvas_password)
+    db.commit()
+    return {"ok": True, "message": "绑定成功", "tripcanvas_username": data.tripcanvas_username}
+
+
+@router.delete("/tripcanvas-binding")
+def delete_tripcanvas_binding(current_user: User = Depends(get_current_user),
+                              db: Session = Depends(get_db)):
+    """解绑 TripCanvas 账号。"""
+    current_user.tripcanvas_username = None
+    current_user.tripcanvas_password = None
+    db.commit()
+    return {"ok": True, "message": "已解绑"}

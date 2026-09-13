@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models import User, MemoryTrip, MemoryNode, MemoryPhoto
 from ..routers.auth import get_current_user
 from ..services.tripcanvas_client import tripcanvas_client
+from ..services.credential_crypto import decrypt_password
 from ..services.photo_matcher import match_photos_to_nodes
 from ..services.ai_service import ai_service
 from ..services.tts_service import generate_tts_sync
@@ -115,9 +116,21 @@ def get_trip(trip_id: int, current_user: User = Depends(get_current_user), db: S
 
 @router.post("/sync-from-tripcanvas/{tripcanvas_trip_id}")
 def sync_from_tripcanvas(tripcanvas_trip_id: int, current_user: User = Depends(get_current_user)):
-    """从TripCanvas同步行程定稿。"""
+    """从TripCanvas同步行程定稿。
+
+    若当前用户在「个人中心」绑定了 TripCanvas 账号，则使用该账号访问
+    TripCanvas（可同步本人账号下的行程）；否则使用后端服务账号。
+    """
     try:
-        trip = tripcanvas_client.sync_trip(tripcanvas_trip_id, current_user.id)
+        bound_name = current_user.tripcanvas_username
+        bound_pass = decrypt_password(current_user.tripcanvas_password)
+        if bound_name and bound_pass:
+            trip = tripcanvas_client.sync_trip(
+                tripcanvas_trip_id, current_user.id,
+                username=bound_name, password=bound_pass,
+            )
+        else:
+            trip = tripcanvas_client.sync_trip(tripcanvas_trip_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not trip:

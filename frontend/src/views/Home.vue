@@ -58,6 +58,7 @@
     </div>
 
     <van-action-sheet v-model:show="showUserMenu" title="用户中心">
+      <van-cell title="TripCanvas 账号绑定" is-link @click="goBinding" />
       <van-cell title="设置" is-link @click="showUserMenu = false" />
       <van-cell title="退出登录" is-link @click="onLogout" />
     </van-action-sheet>
@@ -94,6 +95,11 @@ function onLogout() {
   userStore.logout()
   showUserMenu.value = false
   router.replace('/login')
+}
+
+function goBinding() {
+  showUserMenu.value = false
+  router.push('/settings/tripcanvas-binding')
 }
 
 onMounted(loadTrips)

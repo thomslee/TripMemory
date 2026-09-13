@@ -7,3 +7,4 @@ pydantic>=2.12
 python-multipart>=0.0.9
 aiofiles>=24.1.0
 edge-tts>=6.1.10
+cryptography>=42.0

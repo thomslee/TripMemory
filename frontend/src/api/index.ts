@@ -32,6 +32,11 @@ export const authApi = {
   register: (username: string, password: string, nickname?: string) =>
     api.post('/auth/register', null, { params: { username, password, nickname } }),
   me: () => api.get('/auth/me'),
+  // TripCanvas 账号绑定（同步行程时使用绑定账号访问 TripCanvas）
+  getTripCanvasBinding: () => api.get('/auth/tripcanvas-binding'),
+  bindTripCanvas: (tripcanvasUsername: string, tripcanvasPassword: string) =>
+    api.put('/auth/tripcanvas-binding', { tripcanvas_username: tripcanvasUsername, tripcanvas_password: tripcanvasPassword }),
+  unbindTripCanvas: () => api.delete('/auth/tripcanvas-binding'),
 }
 
 // 记忆行程API

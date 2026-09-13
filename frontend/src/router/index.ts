@@ -39,6 +39,12 @@ const router = createRouter({
       component: () => import('../views/BaiduSync.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/settings/tripcanvas-binding',
+      name: 'TripCanvasBinding',
+      component: () => import('../views/TripCanvasBinding.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
   scrollBehavior() {
     return { top: 0 }
