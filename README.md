@@ -104,9 +104,9 @@ cd frontend && npm run dev
 6. 详情页「AI生成游记」→「生成全部配音」
 7. 进入「**动态展示**」页：照片墙 + 游记朗读 + 背景音乐 + 自动连播
 
-## 生产部署（腾讯云 82.156.177.145）
+## 生产部署（腾讯云 62.234.121.63）
 
-服务器与 TripCanvas 共用（TripCanvas 前端 8081 / 后端 8002，TripMemory 前端 8082 / 后端 8003）。
+服务器与 TripCanvas / Car 系统共用（TripCanvas 前端 8081 / 后端 8002，TripMemory 前端 8082 / 后端 8003，Car 8090 / 8443）。
 
 ```bash
 # 1. 本地构建前端
@@ -128,7 +128,7 @@ sudo nginx -t && sudo nginx -s reload
 **注意**：
 - TripCanvas 后端须先部署并包含「行程定稿」接口（`POST /api/trips/{id}/finalize`）
 - TripMemory 容器通过 docker 网络 `news_news_net` 直连 `trip-backend:8002`（compose 内已配置）
-- 生产环境 DeepSeek 密钥、百度网盘 Redirect URI 等需在服务器 `.env` 中配置
+- 生产环境 DeepSeek 密钥、百度网盘密钥等需在服务器 `.env` 中配置（百度网盘授权使用 `oob` 模式）
 
 ## 数据模型
 

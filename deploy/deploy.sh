@@ -1,5 +1,5 @@
 #!/bin/bash
-# TripMemory 旅游记忆系统部署脚本（腾讯云 82.156.177.145，与 TripCanvas 共用服务器）
+# TripMemory 旅游记忆系统部署脚本（腾讯云 62.234.121.63，与 TripCanvas 共用服务器）
 # 用法: bash deploy.sh
 set -e
 
@@ -39,7 +39,7 @@ docker ps --format '{{.Names}} {{.Status}}' | grep trip-memory-backend
 curl -s http://127.0.0.1:8003/api/health && echo "" || echo "警告：健康检查失败"
 
 echo "=== 6. 部署前端 ==="
-# 本地构建产物通过 scp 上传（在本地执行: scp -r frontend/dist/* ubuntu@82.156.177.145:/var/www/tripmemory/current/）
+# 本地构建产物通过 scp 上传（在本地执行: scp -r frontend/dist/* ubuntu@62.234.121.63:/var/www/tripmemory/current/）
 # 或服务器上已有构建产物则直接解压
 if [ -d "frontend/dist" ]; then
   rsync -a --delete frontend/dist/ "$WEB_DIR/current/"
@@ -51,10 +51,10 @@ sudo nginx -t && sudo nginx -s reload || echo "nginx 未安装或配置失败，
 
 echo ""
 echo "=== 部署完成 ==="
-echo "前端: http://82.156.177.145:8082"
+echo "前端: http://62.234.121.63:8082"
 echo "后端: http://127.0.0.1:8003"
 echo ""
 echo "注意："
 echo "1. TripCanvas 需先部署并运行在 127.0.0.1:8002（backend 通过 localhost 访问）"
 echo "2. 确保 trip_canvas 中存在已定稿行程，且服务账号可访问"
-echo "3. .env 中的 BAIDUNET_REDIRECT_URI 需为 http://82.156.177.145:8082/baidu-sync 回调地址"
+echo "3. 百度网盘授权使用 oob 模式（.env 中 BAIDUNET_REDIRECT_URI=oob），无需配置回调地址"
