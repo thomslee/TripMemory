@@ -7,6 +7,60 @@ from ..database import SessionLocal
 from ..models import AppSetting
 
 
+TRAVEL_TYPE_NAMES = {
+    "solo": "单人游",
+    "companion": "结伴游",
+    "family": "家庭游",
+}
+
+
+def _format_persona(profile: dict | None) -> str:
+    """把用户画像格式化为中文描述；无有效信息返回空串。"""
+    if not profile:
+        return ""
+    parts = []
+    age = profile.get("age")
+    gender = profile.get("gender")
+    identity = profile.get("identity")
+    prefs = profile.get("preferences") or []
+    if age and gender:
+        parts.append(f"{age}岁{gender}")
+    elif age:
+        parts.append(f"{age}岁")
+    elif gender:
+        parts.append(gender)
+    if identity:
+        parts.append(identity)
+    if prefs:
+        parts.append("兴趣：" + "、".join(prefs[:5]))
+    return "、".join(parts) if parts else ""
+
+
+def _format_travel_prefs(travel_prefs: dict | None) -> str:
+    """把行程出行偏好格式化为中文描述；无有效信息返回空串。"""
+    if not travel_prefs or not isinstance(travel_prefs, dict):
+        return ""
+    parts = []
+    ttype = travel_prefs.get("travel_type")
+    if ttype:
+        parts.append(TRAVEL_TYPE_NAMES.get(ttype, ttype))
+    pace = travel_prefs.get("pace")
+    if pace:
+        pace_names = {"relaxed": "休闲", "balanced": "适中", "intense": "紧凑"}
+        parts.append(pace_names.get(pace, pace) + "节奏")
+    budget = travel_prefs.get("budget")
+    if budget:
+        budget_names = {"economy": "经济", "comfort": "舒适", "luxury": "奢华"}
+        parts.append(budget_names.get(budget, budget) + "预算")
+    travelers = travel_prefs.get("travelers")
+    if travelers:
+        parts.append(f"{travelers}人出行")
+    requirements = travel_prefs.get("requirements")
+    if requirements:
+        parts.append("特别要求：" + str(requirements))
+    return "；".join(parts) if parts else ""
+
+
 def _load_llm_config() -> dict:
     """读取大模型配置：数据库设置优先，环境变量兜底。"""
     rows = {}
@@ -53,8 +107,10 @@ class AIService:
         weather: str,
         user_note: str = "",
         photo_count: int = 0,
+        profile: dict | None = None,
+        travel_prefs: dict | None = None,
     ) -> str:
-        """生成单个节点的游记文字。"""
+        """生成单个节点的游记文字（可结合用户画像与出行偏好个性化写作）。"""
         cfg = self._cfg()
         base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
         if not api_key:
@@ -79,6 +135,12 @@ class AIService:
 6. 不要使用markdown格式，直接输出正文
 
 """
+        persona = _format_persona(profile)
+        if persona:
+            prompt += f"我的画像：{persona}。请以贴合我身份和兴趣的视角来写。\n"
+        travel_desc = _format_travel_prefs(travel_prefs)
+        if travel_desc:
+            prompt += f"本次出行：{travel_desc}。请贴合本次出行的类型和节奏。\n"
         if user_note:
             prompt += f"用户备注：{user_note}\n"
         if photo_count > 0:
@@ -109,8 +171,10 @@ class AIService:
         cities: list[str],
         days: int,
         highlights: list[str],
+        profile: dict | None = None,
+        travel_prefs: dict | None = None,
     ) -> str:
-        """生成整个行程的总结性文字。"""
+        """生成整个行程的总结性文字（可结合用户画像与出行偏好）。"""
         cfg = self._cfg()
         base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
         if not api_key:
@@ -129,6 +193,12 @@ class AIService:
 3. 语言优美，适合配音朗读
 4. 不要使用markdown格式，直接输出正文
 """
+        persona = _format_persona(profile)
+        if persona:
+            prompt += f"旅行者画像：{persona}。\n"
+        travel_desc = _format_travel_prefs(travel_prefs)
+        if travel_desc:
+            prompt += f"本次出行：{travel_desc}。\n"
         try:
             resp = _http_post(
                 f"{base_url}/chat/completions",

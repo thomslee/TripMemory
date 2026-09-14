@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """记忆行程模型：从TripCanvas同步的定稿行程。"""
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, DateTime, Date, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Date, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from ..database import Base
 
@@ -21,6 +21,7 @@ class MemoryTrip(Base):
     cover_image = Column(String(512), nullable=True)  # 封面图URL
     status = Column(String(16), default="draft")  # draft / syncing / completed
     baidunet_folder = Column(String(256), nullable=True)  # 遗留字段（百度网盘已移除，保留兼容）
+    travel_preferences = Column(JSON, nullable=True)  # 出行偏好（来自TripCanvas）：{pace,budget,travelers,travel_type,requirements}
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

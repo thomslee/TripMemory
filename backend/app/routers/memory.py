@@ -113,11 +113,14 @@ def get_trip(trip_id: int, current_user: User = Depends(get_current_user), db: S
 
 
 @router.post("/sync-from-tripcanvas/{tripcanvas_trip_id}")
-def sync_from_tripcanvas(tripcanvas_trip_id: int, current_user: User = Depends(get_current_user)):
+def sync_from_tripcanvas(tripcanvas_trip_id: int, current_user: User = Depends(get_current_user),
+                         db: Session = Depends(get_db)):
     """从TripCanvas同步行程定稿。
 
     若当前用户在「个人中心」绑定了 TripCanvas 账号，则使用该账号访问
     TripCanvas（可同步本人账号下的行程）；否则使用后端服务账号。
+    同步时顺带拉取绑定账号的用户画像（gender/age/identity/preferences）缓存到本地，
+    供 AI 生成游记等个性化功能使用。
     """
     try:
         bound_name = current_user.tripcanvas_username
@@ -127,6 +130,17 @@ def sync_from_tripcanvas(tripcanvas_trip_id: int, current_user: User = Depends(g
                 tripcanvas_trip_id, current_user.id,
                 username=bound_name, password=bound_pass,
             )
+            # 同步成功 → 拉取绑定账号的用户画像并缓存到本地用户
+            if trip:
+                profile = tripcanvas_client.get_user_profile(bound_name, bound_pass)
+                if profile:
+                    current_user.gender = profile.get("gender")
+                    current_user.age = profile.get("age")
+                    current_user.identity = profile.get("identity")
+                    current_user.preferences = profile.get("preferences")
+                    db.add(current_user)
+                    db.commit()
+                    print(f"[TripCanvas] 用户画像已缓存: {bound_name} -> {profile.get('preferences')}")
         else:
             trip = tripcanvas_client.sync_trip(tripcanvas_trip_id, current_user.id)
     except ValueError as e:
@@ -236,10 +250,11 @@ def delete_photo(
 
 @router.post("/trips/{trip_id}/nodes/{node_id}/generate-article")
 def generate_article(trip_id: int, node_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """AI生成单个节点的游记。"""
+    """AI生成单个节点的游记（结合用户画像与出行偏好，个性化写作）。"""
     node = db.query(MemoryNode).filter(MemoryNode.id == node_id, MemoryNode.trip_id == trip_id).first()
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
+    trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id).first()
     photo_count = len(node.photos)
     article = ai_service.generate_article(
         node_name=node.name,
@@ -248,6 +263,13 @@ def generate_article(trip_id: int, node_id: int, current_user: User = Depends(ge
         weather=node.weather or "",
         user_note=node.note or "",
         photo_count=photo_count,
+        profile={
+            "gender": current_user.gender,
+            "age": current_user.age,
+            "identity": current_user.identity,
+            "preferences": current_user.preferences,
+        },
+        travel_prefs=trip.travel_preferences if trip else None,
     )
     if article:
         node.article = article

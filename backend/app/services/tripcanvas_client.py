@@ -125,6 +125,24 @@ class TripCanvasClient:
             print(f"[TripCanvas] 获取时间线失败: {e}")
             return None
 
+    def get_user_profile(self, username: str, password: str | None = None,
+                         token: str | None = None) -> dict | None:
+        """获取 TripCanvas 用户画像（gender/age/identity/preferences）。
+
+        token 提供时直接使用；否则用绑定账号登录后获取。
+        """
+        if token is None:
+            if not password:
+                return None
+            token = self.login_user(username, password)
+        if not token:
+            return None
+        try:
+            return _http_get(f"{self.base_url}/auth/me", headers=self._headers(token))
+        except Exception as e:
+            print(f"[TripCanvas] 获取用户画像失败: {e}")
+            return None
+
     def sync_trip(self, trip_id: int, user_id: int,
                   username: str | None = None, password: str | None = None) -> MemoryTrip | None:
         """从TripCanvas同步行程到记忆系统（仅限已定稿行程）。
@@ -176,6 +194,8 @@ class TripCanvasClient:
             memory_trip.depart_date = trip_data.get("depart_date")
             memory_trip.return_date = trip_data.get("return_date")
             memory_trip.status = "completed"
+            # 出行偏好（出行类型/节奏/预算/人数/要求等），来自 TripCanvas 行程 preferences
+            memory_trip.travel_preferences = trip_data.get("preferences") or None
 
             db.flush()  # 分配自增ID并校验必填字段，供后续节点引用
 
