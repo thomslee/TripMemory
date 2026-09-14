@@ -110,14 +110,12 @@
             <van-icon name="weather-o" /> {{ node.weather }} {{ node.temperature || '' }}
           </div>
 
-          <!-- 照片 -->
+          <!-- 照片：点击可手动调整归属 -->
           <div v-if="node.photos.length > 0" class="node-photos">
+            <div class="node-photos-hint">点击照片可调整归属</div>
             <div class="photo-row">
-              <div v-for="photo in node.photos.slice(0, 4)" :key="photo.id" class="photo-thumb small">
+              <div v-for="photo in node.photos" :key="photo.id" class="photo-thumb small" @click="openAssign(photo)">
                 <van-image :src="photo.display_url" fit="cover" width="100%" height="100%" />
-              </div>
-              <div v-if="node.photos.length > 4" class="photo-more">
-                +{{ node.photos.length - 4 }}
               </div>
             </div>
           </div>
@@ -250,11 +248,12 @@ async function onAfterRead(file: any) {
   }
 }
 
-// ---- 手动关联照片到节点 ----
+// ---- 手动调整照片归属（节点照片与未匹配照片均可） ----
 const assignActions = computed(() => {
   if (!trip.value?.nodes) return []
+  const current = assignSheet.value.photo?.node_id
   return trip.value.nodes.map((n: any) => ({
-    name: `第${n.day_no}天 · ${n.name}`,
+    name: `第${n.day_no}天 · ${n.name}${n.id === current ? '（当前）' : ''}`,
     value: n.id,
   }))
 })
@@ -267,6 +266,10 @@ async function onAssignSelect(action: any) {
   assignSheet.value.show = false
   const photo = assignSheet.value.photo
   if (!photo) return
+  if (action.value === photo.node_id) {
+    // 选择当前节点，无变化
+    return
+  }
   try {
     await memoryApi.assignPhoto(Number(route.params.id), photo.id, action.value)
     showToast('已关联到节点')
@@ -282,9 +285,10 @@ async function onAssignCancel() {
   if (!photo) return
   try {
     await memoryApi.assignPhoto(Number(route.params.id), photo.id, 0)
+    showToast('已取消关联')
     await loadTrip()
   } catch (e) {
-    // 取消关联失败可忽略
+    showToast('操作失败')
   }
 }
 
@@ -568,22 +572,17 @@ onMounted(loadTrip)
   margin-bottom: 10px;
 }
 
+.node-photos-hint {
+  font-size: 11px;
+  color: var(--tm-ink-2);
+  margin-bottom: 4px;
+}
+
 .photo-row {
   display: flex;
   gap: 6px;
   align-items: center;
-}
-
-.photo-more {
-  width: 56px;
-  height: 56px;
-  background: #f0f0f0;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--tm-ink-2);
+  flex-wrap: wrap;
 }
 
 .node-article {
