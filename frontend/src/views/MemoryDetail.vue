@@ -163,6 +163,28 @@
             </div>
           </div>
 
+          <!-- 我的感想：文字/语音输入，AI生成游记时融入 -->
+          <div class="node-note">
+            <div class="node-note-header">
+              <span class="node-note-title">我的感想</span>
+              <button v-if="speechSupported" class="link-btn" :class="{ recording: node.recording }" @click="startVoiceNote(node)">
+                {{ node.recording ? '● 停止' : '语音输入' }}
+              </button>
+            </div>
+            <textarea
+              v-model="node.noteDraft"
+              class="node-note-input"
+              rows="2"
+              maxlength="500"
+              placeholder="说说这里的风景、心情、小故事……AI 会把它融进游记"
+            ></textarea>
+            <div class="node-note-actions">
+              <button class="link-btn" @click="saveNote(node)">保存感想</button>
+              <span v-if="node.noteSaved" class="note-saved">已保存</span>
+              <span v-if="node.recording" class="note-listening">聆听中…</span>
+            </div>
+          </div>
+
           <!-- 游记 -->
           <div v-if="node.article" class="node-article">
             <p>{{ node.article }}</p>
@@ -226,6 +248,7 @@ async function loadTrip() {
   loading.value = true
   try {
     const res: any = await memoryApi.detail(Number(route.params.id))
+    res.nodes.forEach((n: any) => (n.noteDraft = n.note || ''))
     trip.value = res
   } catch (e) {
     showToast('加载失败')
@@ -391,6 +414,61 @@ async function onGenerateArticle(node: any) {
     showToast('生成成功')
   } catch (e) {
     showToast('生成失败')
+  }
+}
+
+// ---- 我的感想：保存 + 语音输入 ----
+const speechSupported =
+  typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+let voiceRecognition: any = null
+
+async function saveNote(node: any) {
+  try {
+    await memoryApi.updateNode(Number(route.params.id), node.id, { note: node.noteDraft || '' })
+    node.note = node.noteDraft || ''
+    node.noteSaved = true
+    setTimeout(() => (node.noteSaved = false), 2000)
+    showToast('感想已保存')
+  } catch (e) {
+    showToast('保存失败')
+  }
+}
+
+function startVoiceNote(node: any) {
+  const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SR) {
+    showToast('当前浏览器不支持语音输入，请改用文字输入')
+    return
+  }
+  if (!voiceRecognition) {
+    voiceRecognition = new SR()
+    voiceRecognition.lang = 'zh-CN'
+    voiceRecognition.continuous = true
+    voiceRecognition.interimResults = true
+    voiceRecognition.onresult = (e: any) => {
+      let text = ''
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript
+      node.noteDraft = text
+    }
+    voiceRecognition.onend = () => {
+      node.recording = false
+    }
+    voiceRecognition.onerror = () => {
+      node.recording = false
+      showToast('语音识别失败，请重试')
+    }
+  }
+  if (node.recording) {
+    voiceRecognition.stop()
+    node.recording = false
+  } else {
+    node.recording = true
+    node.noteDraft = ''
+    try {
+      voiceRecognition.start()
+    } catch (e) {
+      node.recording = false
+    }
   }
 }
 
@@ -810,11 +888,77 @@ onMounted(loadTrip)
   flex-wrap: wrap;
 }
 
+.node-note {
+  margin-bottom: 10px;
+  background: #f7f7f8;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.node-note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.node-note-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tm-ink-2);
+}
+
+.node-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ebedf0;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  background: #fff;
+  color: var(--tm-ink);
+}
+
+.node-note-input:focus {
+  outline: none;
+  border-color: var(--tm-primary);
+}
+
+.node-note-actions {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-saved {
+  font-size: 12px;
+  color: var(--tm-primary);
+}
+
+.note-listening {
+  font-size: 12px;
+  color: #e64340;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.link-btn.recording {
+  color: #e64340;
+}
+
 .node-article {
   background: var(--tm-primary-light);
   border-radius: 8px;
-  padding: 10px 12px;
-  margin-top: 10px;
+  padding: 10px 12px;  margin-top: 10px;
 }
 
 .node-article p {

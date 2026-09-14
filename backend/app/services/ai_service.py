@@ -174,7 +174,11 @@ class AIService:
             )
 
         if user_note:
-            prompt += f"用户备注：{user_note}\n"
+            prompt += (
+                f"以下是我游览{node_name}时的真实感受（可能是我口述或随笔记录的）：{user_note}\n"
+                "请把这段真实感受自然地融入游记中，用第一人称转述成有画面感的文字，"
+                "不要生硬引用原话。\n"
+            )
         if photo_count > 0:
             prompt += f"此处有{photo_count}张照片，可以适当提及拍照的体验。\n"
 
