@@ -13,12 +13,19 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+# HEIC/HEIF 支持（iPhone 照片格式；显式注册插件）
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 from ..database import SessionLocal
 from ..models import MemoryPhoto
 
 PHOTO_ROOT = Path(__file__).resolve().parent.parent.parent / "static" / "photos"
 
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 MAX_BYTES = 20 * 1024 * 1024  # 单张上限 20MB
 MAX_EDGE = 1920  # 压缩后的最长边像素
 JPEG_QUALITY = 85
@@ -79,7 +86,7 @@ def save_uploaded_photos(trip_id: int, files: list) -> dict:
         for file in files:
             fname = file.filename or "photo.jpg"
             if not _allowed(fname):
-                errors.append({"filename": fname, "reason": "不支持的格式（仅支持 jpg/png/webp）"})
+                errors.append({"filename": fname, "reason": "不支持的格式（支持 jpg/png/webp/heic）"})
                 continue
             try:
                 raw = file.file.read()
@@ -91,7 +98,7 @@ def save_uploaded_photos(trip_id: int, files: list) -> dict:
                 compressed = _compress(img)
                 img.close()
             except UnidentifiedImageError:
-                errors.append({"filename": fname, "reason": "无法识别的图片文件"})
+                errors.append({"filename": fname, "reason": "无法识别的图片文件（请确认是有效照片）"})
                 continue
             except Exception:
                 errors.append({"filename": fname, "reason": "图片解析失败"})

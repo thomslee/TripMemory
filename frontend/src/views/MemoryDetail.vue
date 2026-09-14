@@ -193,7 +193,11 @@ async function onMatchPhotos() {
   matching.value = true
   try {
     const res: any = await memoryApi.matchPhotos(Number(route.params.id))
-    showToast(`匹配完成：${res.matched}张匹配，${res.unmatched}张未匹配`)
+    if (res.total === 0) {
+      showToast('暂无可匹配的照片，请先上传照片')
+    } else {
+      showToast(`匹配完成：${res.matched}张匹配，${res.unmatched}张未匹配`)
+    }
     await loadTrip()
   } catch (e) {
     showToast('匹配失败')
@@ -206,10 +210,7 @@ async function onMatchPhotos() {
 function beforeRead(file: File | File[]): boolean {
   const files = Array.isArray(file) ? file : [file]
   for (const f of files) {
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) {
-      showToast('仅支持 JPG/PNG/WebP 图片')
-      return false
-    }
+    // 图片类型交给后端识别（兼容手机 HEIC 等格式），前端只限制大小
     if (f.size > 20 * 1024 * 1024) {
       showToast('单张照片不能超过 20MB')
       return false
@@ -225,10 +226,12 @@ async function onAfterRead(file: any) {
   try {
     const res: any = await memoryApi.uploadPhotos(Number(route.params.id), files)
     const match = res.match || {}
-    showToast(
-      `上传${res.saved}张，自动匹配${match.matched}张` +
-        (res.failed ? `，${res.failed}张失败` : '')
-    )
+    const failed = res.failed || 0
+    let msg = `共${files.length}张，成功上传${res.saved}张，自动匹配${match.matched}张`
+    if (failed > 0 && res.errors?.length) {
+      msg += `；${failed}张失败：${res.errors[0].reason}`
+    }
+    showToast(msg)
     uploadFiles.value = []
     await loadTrip()
   } catch (e) {

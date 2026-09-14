@@ -2,6 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# apt 使用国内镜像源（腾讯云，避免 Debian 官方源超时）
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources
+
+# HEIC 照片解码依赖（pillow-heif 需要 libheif 运行库）
+RUN apt-get update && apt-get install -y --no-install-recommends libheif1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # 使用清华pip源加速
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
