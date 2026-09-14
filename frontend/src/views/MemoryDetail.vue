@@ -55,7 +55,7 @@
         <van-uploader
           v-model="uploadFiles"
           multiple
-          :max-count="20"
+          :max-count="50"
           accept="image/*"
           :after-read="onAfterRead"
           :before-read="beforeRead"
@@ -223,14 +223,23 @@ async function onAfterRead(file: any) {
   const files: File[] = (Array.isArray(file) ? file : [file]).map((f: any) => f.file)
   if (!files.length) return
   uploading.value = true
+  // 分批上传（每批5张），避免单请求体过大被 nginx 拦截（413）
+  const BATCH = 5
+  let saved = 0
+  let failed = 0
+  let matched = 0
+  const errors: string[] = []
   try {
-    const res: any = await memoryApi.uploadPhotos(Number(route.params.id), files)
-    const match = res.match || {}
-    const failed = res.failed || 0
-    let msg = `共${files.length}张，成功上传${res.saved}张，自动匹配${match.matched}张`
-    if (failed > 0 && res.errors?.length) {
-      msg += `；${failed}张失败：${res.errors[0].reason}`
+    for (let i = 0; i < files.length; i += BATCH) {
+      const batch = files.slice(i, i + BATCH)
+      const res: any = await memoryApi.uploadPhotos(Number(route.params.id), batch)
+      saved += res.saved || 0
+      failed += res.failed || 0
+      matched += (res.match && res.match.matched) || 0
+      if (res.errors?.length) errors.push(...res.errors.map((e: any) => e.reason))
     }
+    let msg = `共${files.length}张，成功上传${saved}张，自动匹配${matched}张`
+    if (failed > 0) msg += `；${failed}张失败${errors.length ? '：' + errors[0] : ''}`
     showToast(msg)
     uploadFiles.value = []
     await loadTrip()
