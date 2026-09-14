@@ -37,13 +37,23 @@ def _format_persona(profile: dict | None) -> str:
 
 
 def _format_travel_prefs(travel_prefs: dict | None) -> str:
-    """把行程出行偏好格式化为中文描述；无有效信息返回空串。"""
+    """把行程出行偏好格式化为中文描述；无有效信息返回空串。
+
+    travel_type 缺失时按人数推断：1人→单人游；>=2人→结伴游
+    （TripCanvas 旧版创建的行程可能未填出行类型）。
+    """
     if not travel_prefs or not isinstance(travel_prefs, dict):
         return ""
     parts = []
     ttype = travel_prefs.get("travel_type")
     if ttype:
         parts.append(TRAVEL_TYPE_NAMES.get(ttype, ttype))
+    else:
+        travelers = travel_prefs.get("travelers")
+        if travelers == 1:
+            parts.append("单人游")  # 按人数推断：独自出行
+        elif travelers and travelers >= 2:
+            parts.append("结伴游")  # 按人数推断：结伴出行
     pace = travel_prefs.get("pace")
     if pace:
         pace_names = {"relaxed": "休闲", "balanced": "适中", "intense": "紧凑"}
