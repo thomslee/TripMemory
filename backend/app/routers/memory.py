@@ -2,7 +2,7 @@
 """记忆行程路由：行程列表、详情、从TripCanvas同步、照片管理、AI生成游记、配音。"""
 import os
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -11,6 +11,7 @@ from ..routers.auth import get_current_user
 from ..services.tripcanvas_client import tripcanvas_client
 from ..services.credential_crypto import decrypt_password
 from ..services.photo_matcher import match_photos_to_nodes
+from ..services.photo_service import save_uploaded_photos
 from ..services.ai_service import ai_service
 from ..services.tts_service import generate_tts_sync
 
@@ -20,10 +21,8 @@ STATIC_ROOT = Path(__file__).resolve().parent.parent.parent / "static"
 
 
 def _photo_display_url(photo: MemoryPhoto) -> str:
-    """照片展示URL：静态/本地文件直接用，百度网盘照片走代理。"""
-    if photo.thumbnail_url and (photo.thumbnail_url.startswith("/static/") or photo.thumbnail_url.startswith("http")):
-        return photo.thumbnail_url
-    return f"/api/baidunet/photo/{photo.id}/image"
+    """照片展示URL：上传的照片直接走本地静态文件。"""
+    return photo.thumbnail_url or f"/static/{photo.file_path}"
 
 
 @router.get("/trips")
@@ -108,7 +107,6 @@ def get_trip(trip_id: int, current_user: User = Depends(get_current_user), db: S
         "return_date": trip.return_date.isoformat() if trip.return_date else None,
         "status": trip.status,
         "cover_image": trip.cover_image,
-        "baidunet_folder": trip.baidunet_folder,
         "nodes": nodes,
         "unmatched_photos": unmatched_photos,
     }
@@ -146,6 +144,63 @@ def match_photos(trip_id: int, current_user: User = Depends(get_current_user), d
         raise HTTPException(status_code=404, detail="行程不存在")
     result = match_photos_to_nodes(trip_id)
     return result
+
+
+@router.post("/trips/{trip_id}/photos/upload")
+async def upload_photos(
+    trip_id: int,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上传精选照片到记忆行程（支持多文件，自动提取EXIF拍摄时间并压缩存储）。"""
+    trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id, MemoryTrip.user_id == current_user.id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="行程不存在")
+
+    result = save_uploaded_photos(trip_id, files)
+
+    # 上传成功后自动执行时间匹配
+    match_result = {"matched": 0, "unmatched": 0, "total": 0}
+    if result["saved"] > 0:
+        match_result = match_photos_to_nodes(trip_id)
+
+    return {
+        **result,
+        "match": match_result,
+        "message": f"成功上传{result['saved']}张照片" if result["saved"] else "上传失败",
+    }
+
+
+@router.put("/trips/{trip_id}/photos/{photo_id}/assign")
+def assign_photo_to_node(
+    trip_id: int,
+    photo_id: int,
+    node_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """手动将未匹配照片关联到指定行程节点（或取消关联 node_id=0）。"""
+    photo = db.query(MemoryPhoto).filter(
+        MemoryPhoto.id == photo_id,
+        MemoryPhoto.trip_id == trip_id,
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    if node_id:
+        node = db.query(MemoryNode).filter(MemoryNode.id == node_id, MemoryNode.trip_id == trip_id).first()
+        if not node:
+            raise HTTPException(status_code=404, detail="节点不存在")
+        photo.node_id = node_id
+        photo.match_status = "manual"
+        photo.match_score = 100
+    else:
+        photo.node_id = None
+        photo.match_status = "unmatched"
+        photo.match_score = None
+    db.commit()
+    return {"message": "关联成功"}
 
 
 @router.post("/trips/{trip_id}/nodes/{node_id}/generate-article")

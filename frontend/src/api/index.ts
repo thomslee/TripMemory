@@ -46,6 +46,15 @@ export const memoryApi = {
   syncFromTripCanvas: (tripcanvasTripId: number) =>
     api.post(`/memory/sync-from-tripcanvas/${tripcanvasTripId}`),
   matchPhotos: (id: number) => api.post(`/memory/trips/${id}/match-photos`),
+  // 照片上传（本地/图库精选照片，multipart 多文件）
+  uploadPhotos: (tripId: number, files: File[]) => {
+    const form = new FormData()
+    files.forEach((f) => form.append('files', f))
+    return api.post(`/memory/trips/${tripId}/photos/upload`, form)
+  },
+  // 手动关联照片到节点（nodeId=0 取消关联）
+  assignPhoto: (tripId: number, photoId: number, nodeId: number) =>
+    api.put(`/memory/trips/${tripId}/photos/${photoId}/assign`, null, { params: { node_id: nodeId } }),
   generateArticle: (tripId: number, nodeId: number) =>
     api.post(`/memory/trips/${tripId}/nodes/${nodeId}/generate-article`),
   generateTTS: (tripId: number, nodeId: number, voice: string = 'xiaoxiao') =>
@@ -56,19 +65,6 @@ export const memoryApi = {
   updateNode: (tripId: number, nodeId: number, data: any) =>
     api.put(`/memory/trips/${tripId}/nodes/${nodeId}`, null, { params: data }),
   delete: (id: number) => api.delete(`/memory/trips/${id}`),
-}
-
-// 百度网盘API
-export const baidunetApi = {
-  getAuthUrl: () => api.get('/baidunet/auth-url'),
-  authCallback: (code: string) => api.post('/baidunet/callback', null, { params: { code } }),
-  getUserInfo: (accessToken: string) => api.get('/baidunet/user-info', { params: { access_token: accessToken } }),
-  listFolders: (accessToken: string, dir: string = '/') =>
-    api.get('/baidunet/folders', { params: { access_token: accessToken, dir } }),
-  listPhotos: (accessToken: string, folderPath: string) =>
-    api.get('/baidunet/photos', { params: { access_token: accessToken, folder_path: folderPath } }),
-  syncPhotos: (tripId: number, accessToken: string, folderPath: string) =>
-    api.post(`/baidunet/sync/${tripId}`, null, { params: { access_token: accessToken, folder_path: folderPath } }),
 }
 
 export default api

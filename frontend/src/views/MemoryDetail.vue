@@ -42,10 +42,30 @@
           <van-icon name="edit" />
           {{ generating ? '生成中…' : 'AI生成游记' }}
         </button>
-        <button class="tm-btn tm-btn-outline action-btn" @click="router.push(`/baidu-sync/${trip.id}`)">
-          <van-icon name="cloud-o" />
-          网盘同步
+        <button class="tm-btn tm-btn-outline action-btn" :class="{ 'tm-btn-active': showUploader }" @click="showUploader = !showUploader">
+          <van-icon name="plus" />
+          上传照片
         </button>
+      </div>
+
+      <!-- 照片上传面板（本地目录 / 手机图库精选） -->
+      <div v-if="showUploader" class="uploader-card tm-card">
+        <div class="uploader-title">上传精选照片</div>
+        <div class="uploader-desc">支持电脑本地目录或手机图库多选；自动提取拍摄时间匹配到行程节点，可压缩存储</div>
+        <van-uploader
+          v-model="uploadFiles"
+          multiple
+          :max-count="20"
+          accept="image/*"
+          :after-read="onAfterRead"
+          :before-read="beforeRead"
+          :disabled="uploading"
+        >
+          <div class="uploader-trigger">
+            <van-icon name="photograph" size="22" />
+            <span>{{ uploading ? '上传中…' : '选择照片' }}</span>
+          </div>
+        </van-uploader>
       </div>
 
       <!-- 配音批量生成 -->
@@ -57,18 +77,21 @@
         <span class="tts-hint">自动朗读每篇游记，供动态展示页播放</span>
       </div>
 
-      <!-- 未匹配照片 -->
+      <!-- 未匹配照片（可手动关联到节点） -->
       <div v-if="trip.unmatched_photos.length > 0" class="unmatched-section">
-        <h3 class="section-title">未匹配照片 ({{ trip.unmatched_photos.length }})</h3>
+        <h3 class="section-title">未匹配照片 ({{ trip.unmatched_photos.length }}) <span class="section-hint">点击照片可手动关联到节点</span></h3>
         <div class="photo-grid">
-          <div v-for="photo in trip.unmatched_photos" :key="photo.id" class="photo-item">
+          <div v-for="photo in trip.unmatched_photos" :key="photo.id" class="photo-item" @click="openAssign(photo)">
             <div class="photo-thumb">
-              <van-icon name="photo-o" size="24" />
+              <van-image :src="photo.display_url" fit="cover" width="100%" height="100%" />
             </div>
             <span class="photo-name">{{ photo.filename }}</span>
           </div>
         </div>
       </div>
+
+      <!-- 手动关联节点选择 -->
+      <van-action-sheet v-model:show="assignSheet.show" :actions="assignActions" cancel-text="取消关联" @select="onAssignSelect" @cancel="onAssignCancel" />
 
       <!-- 按天分组的节点 -->
       <div v-for="(dayNodes, dayNo) in groupedNodes" :key="dayNo" class="day-section">
@@ -91,7 +114,7 @@
           <div v-if="node.photos.length > 0" class="node-photos">
             <div class="photo-row">
               <div v-for="photo in node.photos.slice(0, 4)" :key="photo.id" class="photo-thumb small">
-                <van-icon name="photo-o" size="20" />
+                <van-image :src="photo.display_url" fit="cover" width="100%" height="100%" />
               </div>
               <div v-if="node.photos.length > 4" class="photo-more">
                 +{{ node.photos.length - 4 }}
@@ -131,6 +154,10 @@ const loading = ref(true)
 const matching = ref(false)
 const generating = ref(false)
 const ttsGenerating = ref(false)
+const showUploader = ref(false)
+const uploadFiles = ref<any[]>([])
+const uploading = ref(false)
+const assignSheet = ref<{ show: boolean; photo: any }>({ show: false, photo: null })
 
 const typeNames: Record<string, string> = {
   hotel: '酒店',
@@ -172,6 +199,80 @@ async function onMatchPhotos() {
     showToast('匹配失败')
   } finally {
     matching.value = false
+  }
+}
+
+// ---- 照片上传 ----
+function beforeRead(file: File | File[]): boolean {
+  const files = Array.isArray(file) ? file : [file]
+  for (const f of files) {
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) {
+      showToast('仅支持 JPG/PNG/WebP 图片')
+      return false
+    }
+    if (f.size > 20 * 1024 * 1024) {
+      showToast('单张照片不能超过 20MB')
+      return false
+    }
+  }
+  return true
+}
+
+async function onAfterRead(file: any) {
+  const files: File[] = (Array.isArray(file) ? file : [file]).map((f: any) => f.file)
+  if (!files.length) return
+  uploading.value = true
+  try {
+    const res: any = await memoryApi.uploadPhotos(Number(route.params.id), files)
+    const match = res.match || {}
+    showToast(
+      `上传${res.saved}张，自动匹配${match.matched}张` +
+        (res.failed ? `，${res.failed}张失败` : '')
+    )
+    uploadFiles.value = []
+    await loadTrip()
+  } catch (e) {
+    showToast('上传失败，请重试')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// ---- 手动关联照片到节点 ----
+const assignActions = computed(() => {
+  if (!trip.value?.nodes) return []
+  return trip.value.nodes.map((n: any) => ({
+    name: `第${n.day_no}天 · ${n.name}`,
+    value: n.id,
+  }))
+})
+
+function openAssign(photo: any) {
+  assignSheet.value = { show: true, photo }
+}
+
+async function onAssignSelect(action: any) {
+  assignSheet.value.show = false
+  const photo = assignSheet.value.photo
+  if (!photo) return
+  try {
+    await memoryApi.assignPhoto(Number(route.params.id), photo.id, action.value)
+    showToast('已关联到节点')
+    await loadTrip()
+  } catch (e) {
+    showToast('关联失败')
+  }
+}
+
+async function onAssignCancel() {
+  assignSheet.value.show = false
+  const photo = assignSheet.value.photo
+  if (!photo) return
+  try {
+    await memoryApi.assignPhoto(Number(route.params.id), photo.id, 0)
+    await loadTrip()
+  } catch (e) {
+    // 取消关联失败可忽略
   }
 }
 
@@ -302,6 +403,49 @@ onMounted(loadTrip)
   flex: 1;
   padding: 10px;
   font-size: 13px;
+}
+
+.tm-btn-active {
+  border-color: var(--tm-primary);
+  color: var(--tm-primary);
+  background: var(--tm-primary-light);
+}
+
+.uploader-card {
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.uploader-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.uploader-desc {
+  font-size: 12px;
+  color: var(--tm-ink-3);
+  margin-bottom: 12px;
+}
+
+.uploader-trigger {
+  width: 96px;
+  height: 96px;
+  border: 1px dashed #c8c9cc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--tm-ink-3);
+  font-size: 12px;
+}
+
+.section-hint {
+  font-size: 11px;
+  color: var(--tm-ink-3);
+  font-weight: 400;
 }
 
 .unmatched-section {

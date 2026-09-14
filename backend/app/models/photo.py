@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""照片模型：从百度网盘同步的照片元数据。"""
+"""照片模型：本地/图库上传的精选照片元数据。"""
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
@@ -7,18 +7,18 @@ from ..database import Base
 
 
 class MemoryPhoto(Base):
-    """照片元数据，大文件存在百度网盘，系统只存元数据和关联关系。"""
+    """照片元数据：文件存服务器磁盘 static/photos/，系统存元数据和关联关系。"""
     __tablename__ = "memory_photos"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     trip_id = Column(Integer, ForeignKey("memory_trips.id"), nullable=False, index=True)
     node_id = Column(Integer, ForeignKey("memory_nodes.id"), nullable=True, index=True)  # 匹配到的行程节点
-    baidunet_file_id = Column(String(128), nullable=True, index=True)  # 百度网盘文件ID
-    filename = Column(String(256), nullable=False)
-    file_path = Column(String(512), nullable=True)  # 百度网盘文件路径
+    baidunet_file_id = Column(String(128), nullable=True, index=True)  # 遗留字段（百度网盘已移除，保留兼容）
+    filename = Column(String(256), nullable=False)  # 原始文件名
+    file_path = Column(String(512), nullable=True)  # 相对存储路径（photos/{trip_id}/{file}）
     file_size = Column(Integer, default=0)
     file_type = Column(String(16), default="photo")  # photo / video
-    thumbnail_url = Column(String(512), nullable=True)  # 缩略图URL
+    thumbnail_url = Column(String(512), nullable=True)  # 展示URL（/static/photos/...）
     download_url = Column(String(512), nullable=True)  # 下载URL（临时）
     taken_time = Column(DateTime, nullable=True, index=True)  # 拍摄时间（EXIF）
     taken_lat = Column(String(32), nullable=True)  # 拍摄纬度（EXIF）

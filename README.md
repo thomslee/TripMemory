@@ -10,7 +10,7 @@
 ## 核心功能
 
 1. **行程定稿同步**：TripCanvas 侧新增「行程定稿」状态（`finalized`），仅定稿行程可同步到 TripMemory（含节点、天气、交通等）。支持**绑定个人 TripCanvas 账号**：同步时使用绑定账号访问 TripCanvas，可同步自己账号下的行程（未绑定时使用服务账号）
-2. **照片归档**：对接百度网盘（OAuth 授权持久化），自动提取照片EXIF信息（拍摄时间、地点），按时间60%+距离40%匹配到行程节点
+2. **照片归档**：本地/手机图库上传精选照片（支持多选，自动压缩存储到服务器磁盘），自动提取照片EXIF拍摄时间，按时间60%+距离40%匹配到行程节点；未匹配照片可手动关联
 3. **AI游记**：DeepSeek 结合景点特色、天气、照片，生成每个节点的旅游游记文字
 4. **游记配音**：edge-tts 免费在线语音，一键批量生成全部节点配音（中文女声，无需API密钥）
 5. **动态展示**：沉浸式回忆展示页 —— 照片墙（灯箱查看）+ 游记文字 + 配音连播 + 背景音乐（内置3首）
@@ -20,7 +20,7 @@
 
 - **前端**：Vue 3 + Vite + Vant + Pinia + Vue Router（端口 5174）
 - **后端**：FastAPI + SQLAlchemy + MySQL（端口 8003）
-- **外部对接**：TripCanvas API、百度网盘开放平台、DeepSeek 大模型、edge-tts
+- **外部对接**：TripCanvas API、DeepSeek 大模型、edge-tts
 
 ## 项目结构
 
@@ -31,10 +31,10 @@ trip-memory/
 │   │   ├── main.py         # 应用入口（含 /static 静态资源挂载）
 │   │   ├── config.py       # 配置
 │   │   ├── database.py     # 数据库连接
-│   │   ├── models/         # 数据模型（含 BaiduNetAuth token 持久化）
-│   │   ├── routers/        # 路由（auth / memory / baidunet）
-│   │   └── services/       # 服务（TripCanvas对接、百度网盘、AI、照片匹配、TTS配音）
-│   ├── static/             # 静态资源（audio 配音 / bgm 背景音乐 / sample-photos）
+│   │   ├── models/         # 数据模型（User / MemoryTrip / MemoryNode / MemoryPhoto）
+│   │   ├── routers/        # 路由（auth / memory）
+│   │   └── services/       # 服务（TripCanvas对接、AI、照片上传匹配、TTS配音）
+│   ├── static/             # 静态资源（audio 配音 / bgm 背景音乐 / photos 上传照片）
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── run.py
@@ -87,7 +87,6 @@ cd frontend && npm run dev
 
 - `TRIPCANVAS_API_URL`：TripCanvas 后端 API 地址
 - `TRIPCANVAS_API_TOKEN` / `TRIPCANVAS_SERVICE_USERNAME` / `TRIPCANVAS_SERVICE_PASSWORD`：TripCanvas 访问凭证（token 过期后自动用服务账号续期）
-- `BAIDUNET_APP_KEY` / `BAIDUNET_SECRET_KEY`：百度网盘开放平台密钥
 - `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`：DeepSeek 大模型配置
 
 ### 4. 绑定个人 TripCanvas 账号（可选）
@@ -100,7 +99,7 @@ cd frontend && npm run dev
 2. 行程无时间线冲突后，点击详情页「**行程定稿**」（状态变为"已定稿"，含冲突校验，无法定稿时会提示原因）
 3. 在 TripMemory「用户中心 → TripCanvas 账号绑定」绑定你的 TripCanvas 账号（若行程归属该账号）
 4. 在 TripMemory 首页「从途迹同步」输入行程ID，仅定稿行程可同步
-5. 百度网盘授权 → 选择照片文件夹 → 批量同步 → 自动匹配到行程节点
+5. 行程详情页「**上传照片**」：电脑本地目录或手机图库多选精选照片，自动提取拍摄时间匹配到行程节点；未匹配的照片点击可手动关联到节点
 6. 详情页「AI生成游记」→「生成全部配音」
 7. 进入「**动态展示**」页：照片墙 + 游记朗读 + 背景音乐 + 自动连播
 
@@ -128,15 +127,14 @@ sudo nginx -t && sudo nginx -s reload
 **注意**：
 - TripCanvas 后端须先部署并包含「行程定稿」接口（`POST /api/trips/{id}/finalize`）
 - TripMemory 容器通过 docker 网络 `news_news_net` 直连 `trip-backend:8002`（compose 内已配置）
-- 生产环境 DeepSeek 密钥、百度网盘密钥等需在服务器 `.env` 中配置（百度网盘授权使用 `oob` 模式）
+- 生产环境 DeepSeek 密钥等需在服务器 `.env` 中配置
 
 ## 数据模型
 
 - **User**：用户
 - **MemoryTrip**：记忆行程（关联TripCanvas行程ID）
 - **MemoryNode**：行程节点（地点、时间、天气、游记、音频）
-- **MemoryPhoto**：照片元数据（百度网盘文件ID、EXIF、匹配状态）
-- **BaiduNetAuth**：百度网盘 OAuth token 持久化（照片代理展示用）
+- **MemoryPhoto**：照片元数据（本地存储路径、EXIF 拍摄时间、匹配状态）
 
 ## License
 

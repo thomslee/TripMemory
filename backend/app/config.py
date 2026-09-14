@@ -27,11 +27,6 @@ class Settings:
     TRIPCANVAS_SERVICE_USERNAME = os.getenv("TRIPCANVAS_SERVICE_USERNAME", "")
     TRIPCANVAS_SERVICE_PASSWORD = os.getenv("TRIPCANVAS_SERVICE_PASSWORD", "")
 
-    # 百度网盘
-    BAIDUNET_APP_KEY = os.getenv("BAIDUNET_APP_KEY", "")
-    BAIDUNET_SECRET_KEY = os.getenv("BAIDUNET_SECRET_KEY", "")
-    BAIDUNET_REDIRECT_URI = os.getenv("BAIDUNET_REDIRECT_URI", "oob")
-
     # AI大模型
     LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
     LLM_API_KEY = os.getenv("LLM_API_KEY", "")

@@ -34,12 +34,6 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/baidu-sync/:tripId',
-      name: 'BaiduSync',
-      component: () => import('../views/BaiduSync.vue'),
-      meta: { requiresAuth: true },
-    },
-    {
       path: '/settings/tripcanvas-binding',
       name: 'TripCanvasBinding',
       component: () => import('../views/TripCanvasBinding.vue'),

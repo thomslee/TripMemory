@@ -29,6 +29,8 @@ deploy/migration_backup/
 # ---------- 本地演示数据（配音音频、示例照片，体积大且无产品价值） ----------
 backend/static/audio/
 backend/static/sample-photos/
+backend/static/photos/
+backend/test_uploads/
 
 # ---------- 个人工具脚本（内含一次性访问token） ----------
 backend/generate_all_articles.py

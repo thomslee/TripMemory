@@ -18,9 +18,9 @@ class MemoryTrip(Base):
     total_days = Column(Integer, default=1)
     depart_date = Column(Date, nullable=True)
     return_date = Column(Date, nullable=True)
-    cover_image = Column(String(512), nullable=True)  # 封面图（百度网盘文件ID或URL）
+    cover_image = Column(String(512), nullable=True)  # 封面图URL
     status = Column(String(16), default="draft")  # draft / syncing / completed
-    baidunet_folder = Column(String(256), nullable=True)  # 百度网盘文件夹路径
+    baidunet_folder = Column(String(256), nullable=True)  # 遗留字段（百度网盘已移除，保留兼容）
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
