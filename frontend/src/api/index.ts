@@ -74,6 +74,8 @@ export const memoryApi = {
     api.delete(`/memory/trips/${tripId}/photos/${photoId}`),
   generateArticle: (tripId: number, nodeId: number) =>
     api.post(`/memory/trips/${tripId}/nodes/${nodeId}/generate-article`),
+  reviseArticle: (tripId: number, nodeId: number, feedback: string) =>
+    api.post(`/memory/trips/${tripId}/nodes/${nodeId}/revise-article`, { feedback }),
   generateTTS: (tripId: number, nodeId: number, voice: string = 'xiaoxiao') =>
     api.post(`/memory/trips/${tripId}/nodes/${nodeId}/tts`, null, { params: { voice } }),
   generateTTSAll: (tripId: number, voice: string = 'xiaoxiao') =>

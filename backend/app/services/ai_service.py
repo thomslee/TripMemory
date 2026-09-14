@@ -201,6 +201,83 @@ class AIService:
             print(f"[AI] 生成游记失败: {e}")
             return ""
 
+    def revise_article(
+        self,
+        node_name: str,
+        node_type: str,
+        city: str,
+        original_article: str,
+        feedback: str,
+        profile: dict | None = None,
+        travel_prefs: dict | None = None,
+        prev_node: dict | None = None,
+        next_node: dict | None = None,
+        day_sequence: list[str] | None = None,
+    ) -> str:
+        """根据用户的修改意见，在原文基础上优化游记（支持多轮迭代）。
+
+        feedback 为用户对当前游记的不满/修改意见；返回优化后的完整正文。
+        """
+        cfg = self._cfg()
+        base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
+        if not api_key:
+            return ""
+
+        type_names = {
+            "hotel": "酒店",
+            "attraction": "景点",
+            "restaurant": "餐厅",
+            "station": "交通枢纽",
+        }
+        type_name = type_names.get(node_type, "地点")
+
+        prompt = f"""以下是我为{city}的{node_name}（{type_name}）写的游记，我对它不太满意，请你根据我的修改意见进行优化。
+
+【原游记】
+{original_article}
+
+【我的修改意见】
+{feedback or "请整体润色，让文字更优美流畅"}
+
+要求：
+1. 保留游记的基本风格和第一人称视角
+2. 只针对修改意见优化，不要偏离{city}的{node_name}这个主题
+3. 字数200-300字，语言优美，适合配音朗读
+4. 不要使用markdown格式，直接输出优化后的完整正文
+
+"""
+        persona = _format_persona(profile)
+        if persona:
+            prompt += f"我的画像：{persona}。\n"
+        travel_desc = _format_travel_prefs(travel_prefs)
+        if travel_desc:
+            prompt += f"本次出行：{travel_desc}。\n"
+        if day_sequence and len(day_sequence) > 1:
+            prompt += "今天的行程路线：" + " → ".join(day_sequence) + "\n"
+        if prev_node:
+            prompt += f"上一站是{prev_node.get('name', '上一站')}。\n"
+        if next_node:
+            prompt += f"下一站是{next_node.get('name', '下一站')}。\n"
+
+        try:
+            resp = _http_post(
+                f"{base_url}/chat/completions",
+                {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "你是一位专业的旅游作家，擅长根据读者的修改意见打磨游记。"},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 500,
+                },
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            return resp["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"[AI] 优化游记失败: {e}")
+            return ""
+
     def generate_trip_summary(
         self,
         trip_title: str,

@@ -188,6 +188,10 @@
           <!-- 游记 -->
           <div v-if="node.article" class="node-article">
             <p>{{ node.article }}</p>
+            <div class="node-article-actions">
+              <button class="link-btn" @click="openRevise(node)">AI 优化</button>
+              <button class="link-btn" @click="onGenerateArticle(node)">重新生成</button>
+            </div>
           </div>
           <div v-else class="node-article-empty">
             <button class="link-btn" @click="onGenerateArticle(node)">AI生成游记</button>
@@ -201,6 +205,27 @@
       </div>
     </template>
   </div>
+
+  <!-- AI 优化游记：意见输入 -->
+  <van-dialog
+    v-model:show="reviseShow"
+    title="AI 优化游记"
+    show-cancel-button
+    confirm-button-text="优化"
+    :before-close="onReviseClose"
+  >
+    <div class="revise-dialog">
+      <div v-if="reviseNode" class="revise-target">「{{ reviseNode.name }}」</div>
+      <textarea
+        v-model="reviseFeedback"
+        class="revise-input"
+        rows="4"
+        maxlength="300"
+        placeholder="说说你的想法，比如：太短了，多写点细节；语气再活泼些；开头太平淡；我想突出那家小店的故事……"
+      ></textarea>
+      <div v-if="revising" class="revise-loading">AI 正在优化中…</div>
+    </div>
+  </van-dialog>
 </template>
 
 <script setup lang="ts">
@@ -414,6 +439,40 @@ async function onGenerateArticle(node: any) {
     showToast('生成成功')
   } catch (e) {
     showToast('生成失败')
+  }
+}
+
+// ---- AI 优化游记：提意见迭代 ----
+const reviseShow = ref(false)
+const reviseNode = ref<any>(null)
+const reviseFeedback = ref('')
+const revising = ref(false)
+
+function openRevise(node: any) {
+  reviseNode.value = node
+  reviseFeedback.value = ''
+  reviseShow.value = true
+}
+
+async function onReviseClose(action: string) {
+  if (action !== 'confirm') return true
+  const feedback = reviseFeedback.value.trim()
+  if (!feedback) {
+    showToast('请先填写修改意见')
+    return false
+  }
+  if (!reviseNode.value) return true
+  revising.value = true
+  try {
+    const res: any = await memoryApi.reviseArticle(Number(route.params.id), reviseNode.value.id, feedback)
+    reviseNode.value.article = res.article
+    showToast('优化完成')
+    return true
+  } catch (e) {
+    showToast('优化失败，请重试')
+    return false
+  } finally {
+    revising.value = false
   }
 }
 
@@ -966,6 +1025,47 @@ onMounted(loadTrip)
   line-height: 1.7;
   color: var(--tm-ink);
   margin: 0;
+}
+
+.node-article-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 14px;
+}
+
+.revise-dialog {
+  padding: 4px 16px 16px;
+}
+
+.revise-target {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tm-ink);
+  margin-bottom: 8px;
+}
+
+.revise-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ebedf0;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  color: var(--tm-ink);
+}
+
+.revise-input:focus {
+  outline: none;
+  border-color: var(--tm-primary);
+}
+
+.revise-loading {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--tm-primary);
 }
 
 .node-article-empty {

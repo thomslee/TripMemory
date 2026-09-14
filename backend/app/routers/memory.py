@@ -2,7 +2,7 @@
 """记忆行程路由：行程列表、详情、从TripCanvas同步、照片管理、AI生成游记、配音。"""
 import os
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -248,16 +248,8 @@ def delete_photo(
     return {"message": "照片已删除"}
 
 
-@router.post("/trips/{trip_id}/nodes/{node_id}/generate-article")
-def generate_article(trip_id: int, node_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """AI生成单个节点的游记（结合用户画像与出行偏好，个性化写作）。"""
-    node = db.query(MemoryNode).filter(MemoryNode.id == node_id, MemoryNode.trip_id == trip_id).first()
-    if not node:
-        raise HTTPException(status_code=404, detail="节点不存在")
-    trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id).first()
-    photo_count = len(node.photos)
-
-    # 行程上下文：当天节点序列 + 上一站/下一站（按 day_no/sort_order 排序）
+def _build_trip_context(db: Session, trip_id: int, node_id: int, node: MemoryNode):
+    """构造行程上下文：当天节点序列 + 上一站/下一站（按 day_no/sort_order 排序）。"""
     prev_node = next_node = None
     day_sequence = None
     all_nodes = db.query(MemoryNode).filter(
@@ -273,6 +265,19 @@ def generate_article(trip_id: int, node_id: int, current_user: User = Depends(ge
             if idx < len(all_nodes) - 1 and all_nodes[idx + 1].day_no == node.day_no:
                 n = all_nodes[idx + 1]
                 next_node = {"name": n.name, "node_type": n.node_type, "city": n.city}
+    return prev_node, next_node, day_sequence
+
+
+@router.post("/trips/{trip_id}/nodes/{node_id}/generate-article")
+def generate_article(trip_id: int, node_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """AI生成单个节点的游记（结合用户画像与出行偏好，个性化写作）。"""
+    node = db.query(MemoryNode).filter(MemoryNode.id == node_id, MemoryNode.trip_id == trip_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id).first()
+    photo_count = len(node.photos)
+
+    prev_node, next_node, day_sequence = _build_trip_context(db, trip_id, node_id, node)
 
     article = ai_service.generate_article(
         node_name=node.name,
@@ -281,6 +286,44 @@ def generate_article(trip_id: int, node_id: int, current_user: User = Depends(ge
         weather=node.weather or "",
         user_note=node.note or "",
         photo_count=photo_count,
+        profile={
+            "gender": current_user.gender,
+            "age": current_user.age,
+            "identity": current_user.identity,
+            "preferences": current_user.preferences,
+        },
+        travel_prefs=trip.travel_preferences if trip else None,
+        prev_node=prev_node,
+        next_node=next_node,
+        day_sequence=day_sequence,
+    )
+    if article:
+        node.article = article
+        db.commit()
+    return {"article": article}
+
+
+@router.post("/trips/{trip_id}/nodes/{node_id}/revise-article")
+def revise_article(trip_id: int, node_id: int, feedback: str = Body(..., embed=True),
+                   current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """根据用户的修改意见优化已生成的游记（支持多轮迭代，基于当前版本继续改）。"""
+    node = db.query(MemoryNode).filter(MemoryNode.id == node_id, MemoryNode.trip_id == trip_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    if not node.article:
+        raise HTTPException(status_code=400, detail="请先生成游记，再提出优化意见")
+    if not feedback or not feedback.strip():
+        raise HTTPException(status_code=400, detail="请填写修改意见")
+    trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id).first()
+
+    prev_node, next_node, day_sequence = _build_trip_context(db, trip_id, node_id, node)
+
+    article = ai_service.revise_article(
+        node_name=node.name,
+        node_type=node.node_type or "attraction",
+        city=node.city or "",
+        original_article=node.article,
+        feedback=feedback.strip(),
         profile={
             "gender": current_user.gender,
             "age": current_user.age,
