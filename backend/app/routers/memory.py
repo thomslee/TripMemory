@@ -203,6 +203,37 @@ def assign_photo_to_node(
     return {"message": "关联成功"}
 
 
+@router.delete("/trips/{trip_id}/photos/{photo_id}")
+def delete_photo(
+    trip_id: int,
+    photo_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """从照片库删除照片（文件+记录；已关联节点自动解除关联）。"""
+    photo = db.query(MemoryPhoto).filter(
+        MemoryPhoto.id == photo_id,
+        MemoryPhoto.trip_id == trip_id,
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    # 删除磁盘文件（file_path 形如 photos/{trip_id}/{name}）
+    try:
+        from pathlib import Path as _Path
+        photo_file = _Path(photo.file_path) if photo.file_path else None
+        if photo_file and not photo_file.is_absolute():
+            full = _Path(__file__).resolve().parent.parent.parent / "static" / photo_file
+            if full.exists():
+                full.unlink()
+    except Exception as e:
+        print(f"[PhotoDelete] 文件删除失败: {e}")
+
+    db.delete(photo)
+    db.commit()
+    return {"message": "照片已删除"}
+
+
 @router.post("/trips/{trip_id}/nodes/{node_id}/generate-article")
 def generate_article(trip_id: int, node_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """AI生成单个节点的游记。"""

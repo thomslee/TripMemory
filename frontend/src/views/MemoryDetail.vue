@@ -34,9 +34,9 @@
           <van-icon name="play-circle-o" />
           动态展示
         </button>
-        <button class="tm-btn tm-btn-outline action-btn" :disabled="matching" @click="onMatchPhotos">
+        <button class="tm-btn tm-btn-outline action-btn" @click="libraryShow = true">
           <van-icon name="photo-o" />
-          {{ matching ? '匹配中…' : '匹配照片' }}
+          照片库
         </button>
         <button class="tm-btn tm-btn-outline action-btn" :disabled="generating" @click="onGenerateAllArticles">
           <van-icon name="edit" />
@@ -77,18 +77,47 @@
         <span class="tts-hint">自动朗读每篇游记，供动态展示页播放</span>
       </div>
 
-      <!-- 未匹配照片（可手动关联到节点） -->
-      <div v-if="trip.unmatched_photos.length > 0" class="unmatched-section">
-        <h3 class="section-title">未匹配照片 ({{ trip.unmatched_photos.length }}) <span class="section-hint">点击照片可手动关联到节点</span></h3>
-        <div class="photo-grid">
-          <div v-for="photo in trip.unmatched_photos" :key="photo.id" class="photo-item" @click="openAssign(photo)">
-            <div class="photo-thumb">
-              <van-image :src="photo.display_url" fit="cover" width="100%" height="100%" />
-            </div>
-            <span class="photo-name">{{ photo.filename }}</span>
+      <!-- 照片库（全部照片集中管理） -->
+      <van-popup v-model:show="libraryShow" position="right" class="library-popup">
+        <div class="library-header">
+          <button class="back-btn" @click="libraryShow = false">
+            <van-icon name="arrow-left" />
+          </button>
+          <h3 class="library-title">照片库 ({{ allPhotos.length }})</h3>
+          <button class="lib-match-btn" :disabled="matching" @click="onMatchPhotos">
+            {{ matching ? '匹配中…' : '自动匹配' }}
+          </button>
+        </div>
+        <div class="library-hint">点击照片放大查看，可调整关联节点或删除</div>
+        <div class="library-grid">
+          <div v-for="photo in allPhotos" :key="photo.id" class="library-item" @click="openViewer(photo)">
+            <van-image :src="photo.display_url" fit="cover" class="lib-thumb" />
+            <span class="lib-node-name" :class="{ unassigned: !photo.node_name }">
+              {{ photo.node_name || '未关联' }}
+            </span>
           </div>
         </div>
-      </div>
+      </van-popup>
+
+      <!-- 照片放大查看 -->
+      <van-popup v-model:show="viewerShow" class="viewer-popup">
+        <div class="viewer-body" @click="viewerShow = false">
+          <van-image :src="viewerPhoto?.display_url" fit="contain" class="viewer-img" />
+        </div>
+        <div class="viewer-footer">
+          <div class="viewer-node">当前关联：{{ viewerPhoto?.node_name || '未关联' }}</div>
+          <div class="viewer-actions">
+            <button class="tm-btn tm-btn-outline action-btn" @click="onViewerAssign">
+              <van-icon name="exchange" />
+              调整节点
+            </button>
+            <button class="tm-btn tm-btn-danger action-btn" @click="onDeletePhoto(viewerPhoto)">
+              <van-icon name="delete-o" />
+              删除照片
+            </button>
+          </div>
+        </div>
+      </van-popup>
 
       <!-- 手动关联节点选择 -->
       <van-action-sheet v-model:show="assignSheet.show" :actions="assignActions" cancel-text="取消关联" @select="onAssignSelect" @cancel="onAssignCancel" />
@@ -141,7 +170,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showToast, showConfirmDialog } from 'vant'
 import { memoryApi } from '../api'
 
 const route = useRoute()
@@ -156,6 +185,9 @@ const showUploader = ref(false)
 const uploadFiles = ref<any[]>([])
 const uploading = ref(false)
 const assignSheet = ref<{ show: boolean; photo: any }>({ show: false, photo: null })
+const libraryShow = ref(false)
+const viewerShow = ref(false)
+const viewerPhoto = ref<any>(null)
 
 const typeNames: Record<string, string> = {
   hotel: '酒店',
@@ -245,6 +277,53 @@ async function onAfterRead(file: any) {
     showToast('上传失败，请重试')
   } finally {
     uploading.value = false
+  }
+}
+
+// ---- 照片库 ----
+const allPhotos = computed(() => {
+  if (!trip.value) return []
+  const fromNodes: any[] = []
+  for (const n of trip.value.nodes || []) {
+    for (const p of n.photos || []) {
+      fromNodes.push({ ...p, node_name: n.name })
+    }
+  }
+  const fromUnmatched: any[] = (trip.value.unmatched_photos || []).map((p: any) => ({
+    ...p,
+    node_name: '',
+  }))
+  return [...fromNodes, ...fromUnmatched]
+})
+
+function openViewer(photo: any) {
+  viewerPhoto.value = photo
+  viewerShow.value = true
+}
+
+function onViewerAssign() {
+  viewerShow.value = false
+  openAssign(viewerPhoto.value)
+}
+
+async function onDeletePhoto(photo: any) {
+  if (!photo) return
+  try {
+    await showConfirmDialog({
+      title: '删除照片',
+      message: `确定删除「${photo.filename}」吗？\n删除后不可恢复。`,
+      confirmButtonColor: '#e54d42',
+    })
+  } catch (e) {
+    return // 用户取消
+  }
+  viewerShow.value = false
+  try {
+    await memoryApi.deletePhoto(Number(route.params.id), photo.id)
+    showToast('已删除')
+    await loadTrip()
+  } catch (e) {
+    showToast('删除失败')
   }
 }
 
@@ -509,6 +588,131 @@ onMounted(loadTrip)
   text-overflow: ellipsis;
   white-space: nowrap;
   display: block;
+}
+
+/* ---- 照片库 ---- */
+.library-popup {
+  width: 100%;
+  height: 100%;
+  background: var(--tm-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.library-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tm-line);
+  flex-shrink: 0;
+}
+
+.library-title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  color: var(--tm-ink);
+}
+
+.lib-match-btn {
+  border: none;
+  background: var(--tm-primary);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 14px;
+}
+
+.lib-match-btn:disabled {
+  opacity: 0.6;
+}
+
+.library-hint {
+  padding: 8px 16px 0;
+  font-size: 11px;
+  color: var(--tm-ink-3);
+  flex-shrink: 0;
+}
+
+.library-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.library-item {
+  text-align: center;
+}
+
+.lib-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: #f0f0f0;
+}
+
+.lib-node-name {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--tm-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-node-name.unassigned {
+  color: var(--tm-ink-3);
+}
+
+/* ---- 照片放大查看 ---- */
+.viewer-popup {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.viewer-img {
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-footer {
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.7);
+  flex-shrink: 0;
+}
+
+.viewer-node {
+  color: #fff;
+  font-size: 13px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.tm-btn-danger {
+  background: #fff;
+  color: #e54d42;
+  border: 1px solid #e54d42;
 }
 
 .day-section {

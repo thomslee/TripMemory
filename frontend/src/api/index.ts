@@ -55,6 +55,9 @@ export const memoryApi = {
   // 手动关联照片到节点（nodeId=0 取消关联）
   assignPhoto: (tripId: number, photoId: number, nodeId: number) =>
     api.put(`/memory/trips/${tripId}/photos/${photoId}/assign`, null, { params: { node_id: nodeId } }),
+  // 删除照片（照片库）
+  deletePhoto: (tripId: number, photoId: number) =>
+    api.delete(`/memory/trips/${tripId}/photos/${photoId}`),
   generateArticle: (tripId: number, nodeId: number) =>
     api.post(`/memory/trips/${tripId}/nodes/${nodeId}/generate-article`),
   generateTTS: (tripId: number, nodeId: number, voice: string = 'xiaoxiao') =>
