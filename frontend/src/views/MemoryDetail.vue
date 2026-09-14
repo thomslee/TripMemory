@@ -187,11 +187,26 @@
 
           <!-- 游记 -->
           <div v-if="node.article" class="node-article">
-            <p>{{ node.article }}</p>
-            <div class="node-article-actions">
-              <button class="link-btn" @click="openRevise(node)">AI 优化</button>
-              <button class="link-btn" @click="onGenerateArticle(node)">重新生成</button>
-            </div>
+            <template v-if="node.editing">
+              <textarea
+                v-model="node.articleDraft"
+                class="node-edit-input"
+                rows="8"
+                placeholder="修改游记文字……"
+              ></textarea>
+              <div class="node-article-actions">
+                <button class="link-btn" @click="saveArticle(node)">保存</button>
+                <button class="link-btn" @click="cancelEdit(node)">取消</button>
+              </div>
+            </template>
+            <template v-else>
+              <p>{{ node.article }}</p>
+              <div class="node-article-actions">
+                <button class="link-btn" @click="openRevise(node)">AI 优化</button>
+                <button class="link-btn" @click="onGenerateArticle(node)">重新生成</button>
+                <button class="link-btn" @click="startEdit(node)">编辑</button>
+              </div>
+            </template>
           </div>
           <div v-else class="node-article-empty">
             <button class="link-btn" @click="onGenerateArticle(node)">AI生成游记</button>
@@ -440,6 +455,31 @@ async function onGenerateArticle(node: any) {
   } catch (e) {
     showToast('生成失败')
   }
+}
+
+// ---- 手工编辑游记 ----
+function startEdit(node: any) {
+  node.articleDraft = node.article || ''
+  node.editing = true
+}
+
+async function saveArticle(node: any) {
+  if (!node.articleDraft || !node.articleDraft.trim()) {
+    showToast('游记内容不能为空')
+    return
+  }
+  try {
+    await memoryApi.updateNode(Number(route.params.id), node.id, { article: node.articleDraft })
+    node.article = node.articleDraft
+    node.editing = false
+    showToast('游记已保存')
+  } catch (e) {
+    showToast('保存失败')
+  }
+}
+
+function cancelEdit(node: any) {
+  node.editing = false
 }
 
 // ---- AI 优化游记：提意见迭代 ----
@@ -1031,6 +1071,25 @@ onMounted(loadTrip)
   margin-top: 8px;
   display: flex;
   gap: 14px;
+}
+
+.node-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ebedf0;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.7;
+  resize: vertical;
+  background: #fff;
+  color: var(--tm-ink);
+}
+
+.node-edit-input:focus {
+  outline: none;
+  border-color: var(--tm-primary);
 }
 
 .revise-dialog {
