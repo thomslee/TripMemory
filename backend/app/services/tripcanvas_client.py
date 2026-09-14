@@ -194,6 +194,8 @@ class TripCanvasClient:
                 city = day.get("city")
                 weather = day.get("weather", {})
                 for node in day.get("nodes", []):
+                    # TripCanvas timeline 的节点坐标在关联 poi 对象中（NodeOut 无 lat/lng 字段）
+                    poi = node.get("poi") or {}
                     memory_node = MemoryNode(
                         trip_id=memory_trip.id,
                         day_no=day_no,
@@ -201,9 +203,9 @@ class TripCanvasClient:
                         city=city or node.get("city"),
                         name=node.get("name", ""),
                         node_type=node.get("node_type"),
-                        address=node.get("address"),
-                        lat=node.get("lat"),
-                        lng=node.get("lng"),
+                        address=node.get("address") or poi.get("address"),
+                        lat=node.get("lat") or poi.get("lat"),
+                        lng=node.get("lng") or poi.get("lng"),
                         start_time=node.get("start_time"),
                         end_time=node.get("end_time"),
                         duration_minutes=node.get("duration_minutes", 0),

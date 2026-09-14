@@ -35,9 +35,45 @@ def _allowed(filename: str) -> bool:
     return Path(filename).suffix.lower() in ALLOWED_EXT
 
 
+def _dms_to_decimal(ref: str, dms) -> float | None:
+    """EXIF 度分秒（rational）转十进制度；S/W 取负。"""
+    if not dms:
+        return None
+    try:
+        values = []
+        for v in dms:
+            if isinstance(v, (tuple, list)) and len(v) >= 2:
+                values.append(float(v[0]) / float(v[1]))
+            else:
+                values.append(float(v))
+        deg, minutes, sec = (values + [0, 0, 0])[:3]
+        decimal = deg + minutes / 60 + sec / 3600
+        if ref and ref.strip().upper() in ("S", "W"):
+            decimal = -decimal
+        return round(decimal, 6)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def _extract_gps(exif) -> dict:
+    """从 EXIF GPSInfo IFD 提取经纬度（十进制度）。"""
+    result = {"lat": None, "lng": None}
+    try:
+        gps = exif.get_ifd(0x8825)
+        if not gps:
+            return result
+        lat = _dms_to_decimal(gps.get(0x0001), gps.get(0x0002))  # GPSLatitudeRef / GPSLatitude
+        lng = _dms_to_decimal(gps.get(0x0003), gps.get(0x0004))  # GPSLongitudeRef / GPSLongitude
+        result["lat"] = str(lat) if lat is not None else None
+        result["lng"] = str(lng) if lng is not None else None
+    except Exception:
+        pass
+    return result
+
+
 def _extract_exif(img: Image.Image) -> dict:
-    """提取 EXIF：拍摄时间（DateTimeOriginal 优先）、相机型号。"""
-    result = {"taken_time": None, "camera_model": None}
+    """提取 EXIF：拍摄时间（DateTimeOriginal 优先）、相机型号、GPS 经纬度。"""
+    result = {"taken_time": None, "camera_model": None, "lat": None, "lng": None}
     try:
         exif = img.getexif()
         if not exif:
@@ -45,8 +81,13 @@ def _extract_exif(img: Image.Image) -> dict:
         model = exif.get(0x0110)  # Model
         if model:
             result["camera_model"] = str(model).strip()[:128]
-        dt_original = exif.get(0x9003)  # DateTimeOriginal
-        raw = dt_original or exif.get(0x0132)  # 回退 DateTime
+        # DateTimeOriginal 可能在顶层或 Exif 子 IFD（0x8769），两种都查
+        try:
+            exif_sub = exif.get_ifd(0x8769)
+        except Exception:
+            exif_sub = None
+        dt_original = exif.get(0x9003) or (exif_sub.get(0x9003) if exif_sub else None)
+        raw = dt_original or exif.get(0x0132) or (exif_sub.get(0x0132) if exif_sub else None)
         if raw:
             text = str(raw).strip()
             for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y:%m:%d"):
@@ -55,6 +96,8 @@ def _extract_exif(img: Image.Image) -> dict:
                     break
                 except ValueError:
                     continue
+        gps = _extract_gps(exif)
+        result["lat"], result["lng"] = gps["lat"], gps["lng"]
     except Exception:
         pass
     return result
@@ -120,6 +163,8 @@ def save_uploaded_photos(trip_id: int, files: list) -> dict:
                 file_size=len(compressed),
                 file_type="photo",
                 taken_time=taken_time,
+                taken_lat=exif["lat"],
+                taken_lng=exif["lng"],
                 camera_model=exif["camera_model"],
                 match_status="unmatched",
             )
