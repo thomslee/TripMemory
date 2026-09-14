@@ -65,6 +65,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """管理员权限依赖（设置、用户管理等管理功能使用）。"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return current_user
+
+
 @router.post("/register")
 def register(username: str, password: str, nickname: str = None, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
@@ -133,3 +140,23 @@ def delete_tripcanvas_binding(current_user: User = Depends(get_current_user),
     current_user.tripcanvas_password = None
     db.commit()
     return {"ok": True, "message": "已解绑"}
+
+
+class ChangePasswordIn(BaseModel):
+    """修改密码请求。"""
+    old_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(data: ChangePasswordIn,
+                    current_user: User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """修改当前用户密码。"""
+    if not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    if len(data.new_password) < 4:
+        raise HTTPException(status_code=400, detail="新密码至少 4 位")
+    current_user.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"ok": True, "message": "密码已修改"}

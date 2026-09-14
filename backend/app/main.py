@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import engine, Base
-from .routers import auth_router, memory_router
+from .routers import auth_router, memory_router, settings_router, admin_router
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -27,6 +27,8 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(memory_router)
+app.include_router(settings_router)
+app.include_router(admin_router)
 
 # 静态资源：配音音频、背景音乐、示例照片
 _static_dir = Path(__file__).resolve().parent.parent / "static"

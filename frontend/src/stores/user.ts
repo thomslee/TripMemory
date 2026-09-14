@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { authApi } from '../api'
 
 export const useUserStore = defineStore('user', () => {
@@ -31,5 +31,7 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('tm_user')
   }
 
-  return { token, user, login, register, logout }
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  return { token, user, login, register, logout, isAdmin }
 })

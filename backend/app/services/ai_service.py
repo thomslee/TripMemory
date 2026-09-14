@@ -3,6 +3,29 @@
 import urllib.request
 import json
 from ..config import settings
+from ..database import SessionLocal
+from ..models import AppSetting
+
+
+def _load_llm_config() -> dict:
+    """读取大模型配置：数据库设置优先，环境变量兜底。"""
+    rows = {}
+    try:
+        db = SessionLocal()
+        try:
+            result = db.query(AppSetting).filter(
+                AppSetting.skey.in_(["llm_base_url", "llm_api_key", "llm_model"])
+            ).all()
+            rows = {r.skey: (r.svalue or "") for r in result}
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return {
+        "base_url": (rows.get("llm_base_url") or settings.LLM_BASE_URL).rstrip("/"),
+        "api_key": rows.get("llm_api_key") or settings.LLM_API_KEY,
+        "model": rows.get("llm_model") or settings.LLM_MODEL,
+    }
 
 
 def _http_post(url, data, headers=None, timeout=60):
@@ -19,10 +42,8 @@ def _http_post(url, data, headers=None, timeout=60):
 class AIService:
     """AI大模型服务。"""
 
-    def __init__(self):
-        self.base_url = settings.LLM_BASE_URL.rstrip("/")
-        self.api_key = settings.LLM_API_KEY
-        self.model = settings.LLM_MODEL
+    def _cfg(self):
+        return _load_llm_config()
 
     def generate_article(
         self,
@@ -34,7 +55,9 @@ class AIService:
         photo_count: int = 0,
     ) -> str:
         """生成单个节点的游记文字。"""
-        if not self.api_key:
+        cfg = self._cfg()
+        base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
+        if not api_key:
             return ""
 
         type_names = {
@@ -63,9 +86,9 @@ class AIService:
 
         try:
             resp = _http_post(
-                f"{self.base_url}/chat/completions",
+                f"{base_url}/chat/completions",
                 {
-                    "model": self.model,
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": "你是一位专业的旅游作家，擅长写优美、有感染力的游记。"},
                         {"role": "user", "content": prompt},
@@ -73,7 +96,7 @@ class AIService:
                     "temperature": 0.8,
                     "max_tokens": 500,
                 },
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers={"Authorization": f"Bearer {api_key}"},
             )
             return resp["choices"][0]["message"]["content"].strip()
         except Exception as e:
@@ -88,7 +111,9 @@ class AIService:
         highlights: list[str],
     ) -> str:
         """生成整个行程的总结性文字。"""
-        if not self.api_key:
+        cfg = self._cfg()
+        base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
+        if not api_key:
             return ""
 
         prompt = f"""请为这次旅行写一段开篇引言：
@@ -106,9 +131,9 @@ class AIService:
 """
         try:
             resp = _http_post(
-                f"{self.base_url}/chat/completions",
+                f"{base_url}/chat/completions",
                 {
-                    "model": self.model,
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": "你是一位专业的旅游作家，擅长写优美、有诗意的旅行开篇。"},
                         {"role": "user", "content": prompt},
@@ -116,7 +141,7 @@ class AIService:
                     "temperature": 0.8,
                     "max_tokens": 300,
                 },
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers={"Authorization": f"Bearer {api_key}"},
             )
             return resp["choices"][0]["message"]["content"].strip()
         except Exception as e:

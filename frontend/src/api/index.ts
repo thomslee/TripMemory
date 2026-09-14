@@ -37,6 +37,20 @@ export const authApi = {
   bindTripCanvas: (tripcanvasUsername: string, tripcanvasPassword: string) =>
     api.put('/auth/tripcanvas-binding', { tripcanvas_username: tripcanvasUsername, tripcanvas_password: tripcanvasPassword }),
   unbindTripCanvas: () => api.delete('/auth/tripcanvas-binding'),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
+}
+
+// 应用设置API（管理员）：大模型等外部接口配置
+export const settingsApi = {
+  get: () => api.get('/settings'),
+  update: (data: any) => api.put('/settings', data),
+}
+
+// 管理员API：用户管理
+export const adminApi = {
+  listUsers: () => api.get('/admin/users'),
+  updateRole: (userId: number, role: string) => api.patch(`/admin/users/${userId}`, { role }),
 }
 
 // 记忆行程API
