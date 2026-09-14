@@ -119,8 +119,15 @@ class AIService:
         photo_count: int = 0,
         profile: dict | None = None,
         travel_prefs: dict | None = None,
+        prev_node: dict | None = None,
+        next_node: dict | None = None,
+        day_sequence: list[str] | None = None,
     ) -> str:
-        """生成单个节点的游记文字（可结合用户画像与出行偏好个性化写作）。"""
+        """生成单个节点的游记文字。
+
+        除用户画像/出行偏好外，还可注入行程上下文（前后节点、当天路线），
+        让游记承上启下（如"刚从悬空寺过来，来到应县木塔"）。
+        """
         cfg = self._cfg()
         base_url, api_key, model = cfg["base_url"], cfg["api_key"], cfg["model"]
         if not api_key:
@@ -151,6 +158,21 @@ class AIService:
         travel_desc = _format_travel_prefs(travel_prefs)
         if travel_desc:
             prompt += f"本次出行：{travel_desc}。请贴合本次出行的类型和节奏。\n"
+
+        # 行程路线上下文：当天序列 + 上一站/下一站，让游记承上启下
+        if day_sequence and len(day_sequence) > 1:
+            prompt += "今天的行程路线：" + " → ".join(day_sequence) + "\n"
+        if prev_node:
+            prompt += f"你的上一站是{prev_node.get('name', '上一站')}，从那里一路来到{node_name}。\n"
+        if next_node:
+            prompt += f"游览完{node_name}后，你接着前往{next_node.get('name', '下一站')}。\n"
+        if prev_node or next_node:
+            prompt += (
+                "请以承上启下的叙事方式写这篇游记："
+                "开篇自然呼应你刚刚结束的上一站旅程，"
+                "中间描写本站的所见所感，结尾可过渡到接下来的行程。\n"
+            )
+
         if user_note:
             prompt += f"用户备注：{user_note}\n"
         if photo_count > 0:

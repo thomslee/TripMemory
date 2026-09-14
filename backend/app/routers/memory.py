@@ -256,6 +256,24 @@ def generate_article(trip_id: int, node_id: int, current_user: User = Depends(ge
         raise HTTPException(status_code=404, detail="节点不存在")
     trip = db.query(MemoryTrip).filter(MemoryTrip.id == trip_id).first()
     photo_count = len(node.photos)
+
+    # 行程上下文：当天节点序列 + 上一站/下一站（按 day_no/sort_order 排序）
+    prev_node = next_node = None
+    day_sequence = None
+    all_nodes = db.query(MemoryNode).filter(
+        MemoryNode.trip_id == trip_id
+    ).order_by(MemoryNode.day_no, MemoryNode.sort_order).all()
+    if all_nodes:
+        day_sequence = [n.name for n in all_nodes if n.day_no == node.day_no]
+        idx = next((i for i, n in enumerate(all_nodes) if n.id == node.id), None)
+        if idx is not None:
+            if idx > 0 and all_nodes[idx - 1].day_no == node.day_no:
+                p = all_nodes[idx - 1]
+                prev_node = {"name": p.name, "node_type": p.node_type, "city": p.city}
+            if idx < len(all_nodes) - 1 and all_nodes[idx + 1].day_no == node.day_no:
+                n = all_nodes[idx + 1]
+                next_node = {"name": n.name, "node_type": n.node_type, "city": n.city}
+
     article = ai_service.generate_article(
         node_name=node.name,
         node_type=node.node_type or "attraction",
@@ -270,6 +288,9 @@ def generate_article(trip_id: int, node_id: int, current_user: User = Depends(ge
             "preferences": current_user.preferences,
         },
         travel_prefs=trip.travel_preferences if trip else None,
+        prev_node=prev_node,
+        next_node=next_node,
+        day_sequence=day_sequence,
     )
     if article:
         node.article = article
