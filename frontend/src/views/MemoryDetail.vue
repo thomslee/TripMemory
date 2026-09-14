@@ -119,6 +119,20 @@
         </div>
       </van-popup>
 
+      <!-- 删除照片确认 -->
+      <van-dialog
+        v-model:show="deleteDialog.show"
+        title="删除照片"
+        :show-cancel-button="true"
+        confirm-button-color="#e54d42"
+        @confirm="onDeleteConfirm"
+        @cancel="deleteDialog.show = false"
+      >
+        <div class="delete-dialog-msg">
+          确定删除「{{ deleteDialog.photo?.filename }}」吗？<br />删除后不可恢复。
+        </div>
+      </van-dialog>
+
       <!-- 手动关联节点选择 -->
       <van-action-sheet v-model:show="assignSheet.show" :actions="assignActions" cancel-text="取消关联" @select="onAssignSelect" @cancel="onAssignCancel" />
 
@@ -170,7 +184,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast, showConfirmDialog } from 'vant'
+import { showToast } from 'vant'
 import { memoryApi } from '../api'
 
 const route = useRoute()
@@ -188,6 +202,7 @@ const assignSheet = ref<{ show: boolean; photo: any }>({ show: false, photo: nul
 const libraryShow = ref(false)
 const viewerShow = ref(false)
 const viewerPhoto = ref<any>(null)
+const deleteDialog = ref<{ show: boolean; photo: any }>({ show: false, photo: null })
 
 const typeNames: Record<string, string> = {
   hotel: '酒店',
@@ -306,17 +321,15 @@ function onViewerAssign() {
   openAssign(viewerPhoto.value)
 }
 
-async function onDeletePhoto(photo: any) {
+function onDeletePhoto(photo: any) {
   if (!photo) return
-  try {
-    await showConfirmDialog({
-      title: '删除照片',
-      message: `确定删除「${photo.filename}」吗？\n删除后不可恢复。`,
-      confirmButtonColor: '#e54d42',
-    })
-  } catch (e) {
-    return // 用户取消
-  }
+  deleteDialog.value = { show: true, photo }
+}
+
+async function onDeleteConfirm() {
+  const photo = deleteDialog.value.photo
+  deleteDialog.value.show = false
+  if (!photo) return
   viewerShow.value = false
   try {
     await memoryApi.deletePhoto(Number(route.params.id), photo.id)
@@ -707,6 +720,14 @@ onMounted(loadTrip)
 .viewer-actions {
   display: flex;
   gap: 10px;
+}
+
+.delete-dialog-msg {
+  padding: 8px 16px 20px;
+  font-size: 14px;
+  color: var(--tm-ink);
+  line-height: 1.6;
+  text-align: center;
 }
 
 .tm-btn-danger {
